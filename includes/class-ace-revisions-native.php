@@ -43,7 +43,7 @@ final class Ace_Revisions_Native {
     }
 
     public static function enabled( string $post_type ): bool {
-        return (bool) Ace_Revisions_Settings::get( 'revisions_enabled_' . $post_type, 1 );
+        return ! Ace_Revisions_Settings::get( 'revisions_off_' . $post_type, 0 );
     }
 
     public function revisions_to_keep( $num, WP_Post $post ) {

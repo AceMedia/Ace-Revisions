@@ -2,6 +2,9 @@
 
 Plain-English record of what changed in each release. Dates are when the version was pushed.
 
+## 0.4.1 - 10 September 2026
+- Per-type revision switches are now "switch revisions off" (off by default), so a script or a partial save can never turn revisions off by accident. Anyone who used 0.4.0's tick-to-keep setting: nothing to do, revisions are on unless you tick off.
+
 ## 0.4.0 - 10 September 2026
 - Overview now opens with what is being tracked, and the nightly clean-up (switch it on under Storage) reports its last run there.
 - One-click presets under Meta keys: Ace Crawl Enhancer, WooCommerce prices and stock, featured image, redirect meta.

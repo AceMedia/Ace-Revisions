@@ -106,12 +106,14 @@ final class Ace_Revisions_Settings {
 
         // Native revision controls, one pair per post type that supports revisions.
         foreach ( self::revision_post_types() as $type => $label ) {
-            $fields[ 'revisions_enabled_' . $type ] = [
+            // Stored inverted (off = 1) so a missing value can never switch revisions off by accident.
+            $fields[ 'revisions_off_' . $type ] = [
                 'tab'     => 'limits',
                 'section' => 'limits-types',
                 'type'    => 'checkbox',
-                'label'   => sprintf( __( '%s: keep revisions', 'ace-revisions' ), $label ),
-                'default' => 1,
+                'label'   => sprintf( __( '%s: switch revisions off', 'ace-revisions' ), $label ),
+                'help'    => __( 'Also hides the Revisions panel for this type.', 'ace-revisions' ),
+                'default' => 0,
             ];
             $fields[ 'revisions_keep_' . $type ] = [
                 'tab'     => 'limits',
@@ -163,7 +165,7 @@ final class Ace_Revisions_Settings {
                 continue;
             }
             $stored = get_option( self::OPTION );
-            if ( post_type_supports( $object->name, 'revisions' ) || ! empty( $stored[ 'revisions_enabled_' . $object->name ] ) ) {
+            if ( post_type_supports( $object->name, 'revisions' ) || isset( $stored[ 'revisions_off_' . $object->name ] ) ) {
                 $types[ $object->name ] = $object->labels->name;
             }
         }
@@ -275,6 +277,14 @@ final class Ace_Revisions_Settings {
         $raw   = (string) self::get( $key, '' );
         $lines = array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', $raw ) ) );
         return array_values( array_unique( $lines ) );
+    }
+
+    /**
+     * Change some settings from code without touching the rest (update() treats a
+     * missing checkbox as unticked, which is right for the form but not for scripts).
+     */
+    public static function patch( array $changes ): array {
+        return self::update( array_merge( self::all(), $changes ) );
     }
 
     public static function update( array $raw ): array {

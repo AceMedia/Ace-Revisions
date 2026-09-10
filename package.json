@@ -1,6 +1,6 @@
 {
   "name": "ace-revisions",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Revision history for post meta and taxonomy terms. Tracks who changed what, when and from where, with restore.",
   "license": "GPL-2.0-or-later",

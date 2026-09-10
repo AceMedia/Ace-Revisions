@@ -79,7 +79,7 @@ final class Ace_Revisions_Guide {
                 'content' => '
 <p>WordPress has three knobs for revisions and they normally live in <code>wp-config.php</code> or in code. They are all on the <strong>Native limits</strong> tab:</p>
 <table>
-<tr><th>Keep revisions (per post type)</th><td>Off removes revision support for that type: no revisions are created and the Revisions panel disappears from the editor.</td></tr>
+<tr><th>Switch revisions off (per post type)</th><td>Ticked removes revision support for that type: no revisions are created and the Revisions panel disappears from the editor. Untouched means on.</td></tr>
 <tr><th>Revisions to keep (per post type)</th><td>-1 is unlimited (the WordPress default), 0 keeps none, any other number is a rolling limit per post. Applied through <code>wp_revisions_to_keep</code>.</td></tr>
 <tr><th>Autosave interval</th><td>Seconds between editor autosaves. Applied by defining <code>AUTOSAVE_INTERVAL</code> when wp-config has not.</td></tr>
 </table>
