@@ -19,6 +19,17 @@ final class Ace_Revisions_Term_History {
         add_action( 'admin_post_' . self::ACTION, [ $this, 'handle_restore' ] );
         add_action( 'admin_notices', [ $this, 'notices' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue' ] );
+        add_action( 'load-term.php', [ $this, 'help_tab' ] );
+    }
+
+    public function help_tab(): void {
+        $screen = get_current_screen();
+        if ( ! $screen || ! in_array( $screen->taxonomy, (array) Ace_Revisions_Settings::get( 'taxonomies', [] ), true ) ) {
+            return;
+        }
+        $sections = Ace_Revisions_Guide::sections();
+        $screen->add_help_tab( [ 'id' => 'ace-revisions-terms', 'title' => $sections['terms']['title'], 'content' => wp_kses_post( $sections['terms']['content'] ) ] );
+        $screen->add_help_tab( [ 'id' => 'ace-revisions-sources', 'title' => $sections['sources']['title'], 'content' => wp_kses_post( $sections['sources']['content'] ) ] );
     }
 
     public function hook_taxonomies(): void {

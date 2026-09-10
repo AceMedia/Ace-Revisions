@@ -22,8 +22,9 @@ patterns) use the **speedforce** skill; this file only holds plugin-specific fac
 - `ace-revisions.php` - header, constants, loader.
 - `includes/class-ace-revisions-settings.php` - option schema + sanitiser. Add a setting by adding one entry to `fields()`.
 - `includes/class-ace-revisions.php` - plugin core (hooks wired in `__construct`).
-- `includes/admin/` - settings page (`class-ace-revisions-admin.php` + `views/settings.php`); same two-column
-  layout and SaveBar as Ace Crawl Enhancer.
+- `includes/admin/` - settings page under **Settings** (`class-ace-revisions-admin.php` + `views/settings.php`): tabs →
+  fieldset sections → fields from the settings schema; custom tabs render via `ace_revisions_settings_tab_content`;
+  `class-ace-revisions-guide.php` holds the manual (Guide tab + WP help tabs + per-tab guide panels).
 - `src/` - admin JS (wp-scripts). `styles/scss/admin.scss` - compiles to `assets/css/admin.css`.
 - `build/` and `assets/css/` are committed: consuming sites do not run a build.
 

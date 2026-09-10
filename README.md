@@ -33,7 +33,16 @@ npm run build
 
 Plugin-specific hooks are documented in the source next to each `apply_filters` / `do_action`.
 
+## Where things are
+
+- **Settings → Revisions**: Post meta, Terms, Storage, Guide. Every tab has a "How this works" panel and the Help pull-down carries the manual.
+
 ## Changelog
+
+### 0.2.0
+- Settings page rebuilt on the shared Ace layout: fieldset sections, sidebar sub-navigation, a guide panel on every tab, WordPress help tabs and a full Guide tab.
+- Help tab on tracked term edit screens.
+- Fixed double-logging of first term meta writes and batch ids set mid-request.
 
 ### 0.1.0
 - Initial scaffold: settings page, options store, build tooling.
