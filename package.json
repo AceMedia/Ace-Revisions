@@ -1,0 +1,20 @@
+{
+  "name": "ace-revisions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Revision history for post meta and taxonomy terms. Tracks who changed what, when and from where, with restore.",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "build": "wp-scripts build && npm run build:css",
+    "start": "wp-scripts start",
+    "build:css": "sass styles/scss/admin.scss assets/css/admin.css --style=compressed --no-source-map",
+    "watch:css": "sass styles/scss/admin.scss assets/css/admin.css --style=expanded --watch",
+    "lint:js": "wp-scripts lint-js src",
+    "lint:php": "find . -path ./node_modules -prune -o -name '*.php' -print0 | xargs -0 -n1 php8.4 -l",
+    "plugin-zip": "wp-scripts plugin-zip"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^27.9.0",
+    "sass": "^1.77.8"
+  }
+}

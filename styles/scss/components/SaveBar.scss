@@ -1,0 +1,293 @@
+/**
+ * SaveBar Component Styles for Ace Redis Cache
+ * 
+ * Inspired by GlossPress SaveBar styling with dynamic WordPress admin color scheme support
+ * @package AceMedia\RedisCache  
+ * @since 0.5.0
+ */
+
+// Fallback variables (in case CSS custom properties aren't loaded)
+$primary-color: var(--wp-admin-primary, #2271b1);
+$primary-hover: var(--wp-admin-primary-hover, #135e96);
+$sidebar-color: var(--wp-admin-sidebar, #1d2327);
+$sidebar-light: var(--wp-admin-sidebar-light, #2c3338);
+$success-color: var(--wp-admin-success, #00a32a);
+$error-color: var(--wp-admin-error, #d63638);
+$warning-color: var(--wp-admin-warning, #dba617);
+$info-color: var(--wp-admin-info, #72aee6);
+$background-color: var(--wp-admin-background, #f0f0f1);
+$surface-color: var(--wp-admin-surface, #ffffff);
+$text-color: var(--wp-admin-text, #1d2327);
+$text-color-light: var(--wp-admin-text-light, #646970);
+$border-color: var(--wp-admin-border, #c3c4c7);
+
+.ace-redis-save-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: $surface-color;
+    border-top: 1px solid $border-color;
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+
+    .save-bar-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 20px;
+        max-width: 100%;
+        margin: 0 auto;
+        
+        @media (max-width: 768px) {
+            padding: 10px 15px;
+            flex-direction: column;
+            gap: 10px;
+            align-items: stretch;
+        }
+    }
+
+    .save-bar-left {
+        flex: 1;
+        
+        .save-message {
+            font-size: 14px;
+            color: $success-color;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.3s ease, color 0.3s ease;
+            
+            &.visible {
+                opacity: 1;
+            }
+            
+            &.success {
+                color: $success-color;
+            }
+            
+            &.error {
+                color: $error-color;
+            }
+            
+            &.info {
+                color: $primary-color;
+            }
+        }
+    }
+
+    .save-bar-right {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        
+        @media (max-width: 768px) {
+            justify-content: space-between;
+            width: 100%;
+        }
+        
+        .auto-save-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            
+            .toggle-label {
+                font-size: 13px;
+                color: $text-color;
+                font-weight: 500;
+                white-space: nowrap;
+                user-select: none;
+            }
+            
+            @media (max-width: 768px) {
+                gap: 6px;
+                
+                .toggle-label {
+                    font-size: 12px;
+                }
+            }
+        }
+    }
+
+    #save-bar-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            border: 1px solid var(--wp-admin-border);     // Light green border
+            min-width: 120px;
+            justify-content: center;
+            position: relative;
+            
+            // Auto-save indicator
+            &.auto-saving::after {
+                content: '';
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 8px;
+                height: 8px;
+                background-color: $success-color;
+                border-radius: 50%;
+                animation: auto-save-pulse 1s ease-in-out infinite;
+            }
+            
+            .dashicons {
+                font-size: 16px;
+                line-height: 1;
+                
+                &.dashicons-update {
+                    animation: spin 1s linear infinite;
+                }
+            }
+
+            .button-text {
+                font-weight: 500;
+            }        &:not(:disabled) {
+            background-color: var(--wp-admin-border);     // Light green for save button
+            color: white;
+            
+            &:hover {
+                background-color: var(--wp-admin-text);      // Dark green on hover
+                border-color: var(--wp-admin-text);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 5px rgba(var(--wp-admin-text), 0.3);
+            }
+            
+            &:active {
+                transform: translateY(0);
+                box-shadow: 0 1px 2px rgba(var(--wp-admin-text), 0.2);
+            }
+        }
+
+        &:disabled {
+            background-color: $background-color;
+            color: $text-color-light;
+            border-color: $border-color;
+            cursor: not-allowed;
+            
+            &.success {
+                background-color: $success-color;
+                color: white;
+                border-color: $success-color;
+                animation: success-pulse 0.5s ease-in-out;
+                
+                .dashicons-yes-alt {
+                    color: white;
+                }
+            }
+        }
+        
+        @media (max-width: 768px) {
+            min-width: 100px;
+            padding: 10px 14px;
+        }
+    }
+
+    // Success animation
+    @keyframes success-pulse {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+    
+    // Auto-save toggle pulse animation
+    @keyframes auto-save-pulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba($success-color, 0.4);
+        }
+        50% {
+            box-shadow: 0 0 0 4px rgba($success-color, 0.1);
+        }
+    }
+
+    // Spin animation for loading icon
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    // Responsive adjustments
+    @media (max-width: 480px) {
+        .save-bar-content {
+            padding: 8px 12px;
+        }
+        
+        .auto-save-toggle-wrapper .toggle-label {
+            font-size: 12px;
+        }
+        
+        #save-bar-button {
+            font-size: 13px;
+            padding: 8px 12px;
+            min-width: 90px;
+        }
+    }
+}
+
+// Hide WordPress footer when SaveBar is present
+body.admin-color-scheme {
+    #wpfooter {
+        display: none !important;
+    }
+}
+
+// Adjust main content to account for SaveBar
+.ace-redis-settings {
+    padding-bottom: 80px; // Make room for SaveBar
+    
+    @media (max-width: 768px) {
+        padding-bottom: 100px; // More space on mobile due to stacked layout
+    }
+}
+
+// Dark mode support (WordPress midnight theme and system dark mode)
+@media (prefers-color-scheme: dark) {
+    .ace-redis-save-bar {
+        // CSS custom properties will handle theme colors automatically
+        // But we can add additional dark mode enhancements here if needed
+        box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.3);
+    }
+}
+
+// High contrast accessibility support
+@media (prefers-contrast: high) {
+    .ace-redis-save-bar {
+        border-top: 2px solid #000;
+        
+        #save-bar-button {
+            border-width: 2px;
+            font-weight: 600;
+        }
+        
+        .ace-switch .ace-slider {
+            border: 2px solid #000;
+        }
+    }
+}
+
+// Focus styles for accessibility
+.ace-redis-save-bar {
+    #save-bar-button:focus {
+        outline: 2px solid $primary-color;
+        outline-offset: 2px;
+    }
+    
+    .ace-switch input:focus + .ace-slider {
+        outline: 2px solid $primary-color;
+        outline-offset: 2px;
+    }
+}
