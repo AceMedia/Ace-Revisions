@@ -2,12 +2,13 @@
 /**
  * WP-CLI: inspect and manage tracked history.
  *
- *   wp ace-revisions term <term_id> [--taxonomy=<tax>]      Show a term's history.
- *   wp ace-revisions restore <row_id>                        Restore one change row.
- *   wp ace-revisions prune [--taxonomy=<tax>]                Apply the cap to every tracked term.
- *   wp ace-revisions batch <id> -- <command>                 Not needed: set ACE_REVISIONS_BATCH=<id>
- *                                                            in the environment of any wp command so
- *                                                            every change it makes shares one batch id.
+ *   wp ace-revisions term <term_id> [--taxonomy=<tax>]   List a term's revisions with what changed.
+ *   wp ace-revisions restore <revision_id>                Native restore of one revision (term or post).
+ *   wp ace-revisions snapshot <taxonomy> [--all]          Take a first snapshot of every term now.
+ *   wp ace-revisions prune [--taxonomy=<tax>]             Apply the cap to every tracked term.
+ *
+ * Set ACE_REVISIONS_BATCH=<id> in the environment of any wp command so every
+ * change it makes shares one batch id.
  *
  * @package Ace_Revisions
  */
@@ -18,8 +19,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Ace_Revisions_CLI {
 
+    private function taxonomy_of( int $term_id, array $assoc ): string {
+        if ( ! empty( $assoc['taxonomy'] ) ) {
+            return (string) $assoc['taxonomy'];
+        }
+        $term = get_term( $term_id );
+        if ( ! $term instanceof WP_Term ) {
+            WP_CLI::error( 'Term not found.' );
+        }
+        return $term->taxonomy;
+    }
+
     /**
-     * Show tracked history for a term.
+     * List a term's revisions.
      *
      * ## OPTIONS
      *
@@ -34,32 +46,36 @@ final class Ace_Revisions_CLI {
      */
     public function term( array $args, array $assoc ): void {
         $term_id  = (int) $args[0];
-        $taxonomy = $assoc['taxonomy'] ?? '';
-        if ( ! $taxonomy ) {
-            $term = get_term( $term_id );
-            if ( ! $term instanceof WP_Term ) {
-                WP_CLI::error( 'Term not found.' );
-            }
-            $taxonomy = $term->taxonomy;
+        $taxonomy = $this->taxonomy_of( $term_id, $assoc );
+        $rows     = [];
+        foreach ( Ace_Revisions_Terms::history( $term_id, $taxonomy, 200 ) as $row ) {
+            $user   = $row['user_id'] ? get_userdata( $row['user_id'] ) : null;
+            $rows[] = [
+                'revision' => $row['id'],
+                'date'     => $row['date'],
+                'user'     => $user ? $user->user_login : '',
+                'source'   => $row['source'],
+                'batch'    => $row['batch'],
+                'changed'  => implode( ', ', $row['changed'] ),
+            ];
         }
-        $rows = Ace_Revisions_Terms::history( $term_id, $taxonomy, 500 );
-        foreach ( $rows as &$row ) {
-            $row['old_value'] = is_scalar( $row['old_value'] ) || null === $row['old_value'] ? $row['old_value'] : wp_json_encode( $row['old_value'] );
-            $row['new_value'] = is_scalar( $row['new_value'] ) || null === $row['new_value'] ? $row['new_value'] : wp_json_encode( $row['new_value'] );
-        }
-        WP_CLI\Utils\format_items( $assoc['format'] ?? 'table', $rows, [ 'id', 'created_at', 'user_id', 'field', 'old_value', 'new_value', 'source', 'batch_id' ] );
+        WP_CLI\Utils\format_items( $assoc['format'] ?? 'table', $rows, [ 'revision', 'date', 'user', 'source', 'batch', 'changed' ] );
     }
 
     /**
-     * Restore a single change row (puts the field back to its "before" value).
+     * Restore one revision (native wp_restore_post_revision).
      *
      * ## OPTIONS
      *
-     * <row_id>
-     * : Row id from `wp ace-revisions term`.
+     * <revision_id>
+     * : Revision id from `wp ace-revisions term` or the revisions screen.
      */
     public function restore( array $args ): void {
-        if ( Ace_Revisions_Terms::restore( (int) $args[0] ) ) {
+        $revision = wp_get_post_revision( (int) $args[0] );
+        if ( ! $revision ) {
+            WP_CLI::error( 'Revision not found.' );
+        }
+        if ( wp_restore_post_revision( $revision->ID ) ) {
             WP_CLI::success( 'Restored.' );
         } else {
             WP_CLI::error( 'Nothing restored.' );
@@ -67,7 +83,31 @@ final class Ace_Revisions_CLI {
     }
 
     /**
-     * Apply the per-object cap to every tracked term.
+     * Take a first snapshot of every term in a tracked taxonomy, so history
+     * starts from "now" rather than from each term's next edit.
+     *
+     * ## OPTIONS
+     *
+     * <taxonomy>
+     * : Taxonomy name.
+     */
+    public function snapshot( array $args ): void {
+        $taxonomy = (string) $args[0];
+        if ( ! Ace_Revisions_Terms::is_tracked( $taxonomy ) ) {
+            WP_CLI::error( "Taxonomy {$taxonomy} is not tracked (see settings)." );
+        }
+        $ids = get_terms( [ 'taxonomy' => $taxonomy, 'hide_empty' => false, 'fields' => 'ids' ] );
+        $n   = 0;
+        foreach ( (array) $ids as $id ) {
+            if ( Ace_Revisions_Terms::save_snapshot( (int) $id, $taxonomy ) ) {
+                $n++;
+            }
+        }
+        WP_CLI::success( sprintf( 'Snapshotted %d of %d terms.', $n, count( (array) $ids ) ) );
+    }
+
+    /**
+     * Apply the per-object cap to every tracked term's revisions.
      *
      * ## OPTIONS
      *
@@ -75,19 +115,25 @@ final class Ace_Revisions_CLI {
      * : Limit to one taxonomy.
      */
     public function prune( array $args, array $assoc ): void {
-        global $wpdb;
-        $table = Ace_Revisions::table();
-        $where = '';
-        $params = [];
+        $query = [
+            'post_type'      => Ace_Revisions_Terms::POST_TYPE,
+            'post_status'    => 'any',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        ];
         if ( ! empty( $assoc['taxonomy'] ) ) {
-            $where    = 'WHERE taxonomy = %s';
-            $params[] = $assoc['taxonomy'];
+            $query['meta_key']   = Ace_Revisions_Terms::META_TAX; // phpcs:ignore WordPress.DB.SlowDBQuery
+            $query['meta_value'] = (string) $assoc['taxonomy'];  // phpcs:ignore WordPress.DB.SlowDBQuery
         }
-        $sql   = "SELECT DISTINCT term_id, taxonomy FROM {$table} {$where}";
-        $pairs = $params ? $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ) : $wpdb->get_results( $sql, ARRAY_A );
-        foreach ( $pairs as $pair ) {
-            Ace_Revisions_Terms::prune( (int) $pair['term_id'], $pair['taxonomy'] );
+        $cap     = (int) Ace_Revisions_Settings::get( 'cap_per_object', 5 );
+        $deleted = 0;
+        foreach ( get_posts( $query ) as $post_id ) {
+            $revisions = wp_get_post_revisions( $post_id, [ 'order' => 'DESC' ] );
+            foreach ( array_slice( array_values( $revisions ), $cap ) as $old ) {
+                wp_delete_post_revision( $old->ID );
+                $deleted++;
+            }
         }
-        WP_CLI::success( sprintf( 'Pruned %d terms.', count( $pairs ) ) );
+        WP_CLI::success( sprintf( 'Deleted %d revisions beyond the cap of %d.', $deleted, $cap ) );
     }
 }

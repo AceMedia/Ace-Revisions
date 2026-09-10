@@ -45,6 +45,10 @@ WordPress Playground MCP.
   `update_term_metadata` filter AND `added_term_meta` both fire. The update handler bails when
   `metadata_exists()` is false, otherwise every first write logs twice.
 - `deleted_term_meta` passes an **array** of meta ids as its first argument. Do not type-hint it `int`.
-- `dbDelta()` needs plain `CREATE TABLE` (no `IF NOT EXISTS`) or it stops diffing the table forever.
+- Term history is NOT a custom table any more (0.3.0): native revisions of a hidden `ace_term_snapshot` post per
+  term (id in term meta `_ace_revisions_post`). Snapshots are written once per request on `shutdown` from a dirty
+  list, so one save = one revision. The native revisions screen diff is replaced per field via `wp_get_revision_ui_diff`.
+- Shane's direction (2026-09-10): lean on native revisions UI/backend; whole-object snapshots with a summary of
+  what changed, never per-field logs.
 - On the local Pi, `wp` post saves fatal inside Ace-Redis-Cache (no phpredis in CLI). Test with
   `wp --skip-plugins=Ace-Redis-Cache eval-file ...`.

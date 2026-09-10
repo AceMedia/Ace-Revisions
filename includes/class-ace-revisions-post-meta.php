@@ -23,7 +23,6 @@ final class Ace_Revisions_Post_Meta {
         add_filter( 'wp_save_post_revision_post_has_changed', [ $this, 'meta_has_changed' ], 10, 3 );
         add_action( 'wp_restore_post_revision', [ $this, 'restore_meta' ], 10, 2 );
         add_filter( 'wp_get_revision_ui_diff', [ $this, 'add_meta_to_diff' ], 10, 3 );
-        add_filter( 'wp_revisions_to_keep', [ $this, 'revisions_to_keep' ], 10, 2 );
     }
 
     public static function is_tracked_post_type( string $post_type ): bool {
@@ -146,21 +145,6 @@ final class Ace_Revisions_Post_Meta {
             ];
         }
         return $fields;
-    }
-
-    /**
-     * Respect the per-object cap for tracked post types without touching others.
-     */
-    public function revisions_to_keep( $num, WP_Post $post ) {
-        if ( ! self::is_tracked_post_type( $post->post_type ) ) {
-            return $num;
-        }
-        $cap = (int) Ace_Revisions_Settings::get( 'cap_per_object', 5 );
-        // Never shrink an explicit site-wide limit; only raise a disabled/low one to the cap.
-        if ( -1 === (int) $num ) {
-            return $num;
-        }
-        return max( (int) $num, $cap );
     }
 
     private static function stringify( array $values ): string {

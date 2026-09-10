@@ -43,9 +43,10 @@ final class Ace_Revisions_Guide {
                 'title'   => __( 'Terms', 'ace-revisions' ),
                 'icon'    => 'tag',
                 'content' => '
-<p>Terms have no revisions in WordPress at all, so this plugin keeps its own log: name, slug, description, parent and every term meta key on the tracked taxonomies. It captures changes from any panel, including plugins we did not write, because it listens at the metadata layer rather than to a specific form.</p>
-<p>Open a term to edit it and scroll down to <strong>History</strong>. Each row shows when, who, the field, before, after and the source. <strong>Restore</strong> puts that one field back to its "before" value; the restore is itself logged with the source <code>restore</code>, so nothing is ever silently undone.</p>
-<p>Deleting a term writes a final row so at least the name and slug survive.</p>',
+<p>Terms have no revisions in WordPress at all, so this plugin gives each tracked term a hidden <em>snapshot post</em> and lets WordPress do what it already does well. Every save of the term, from any panel including plugins we did not write, becomes <strong>one native revision</strong> holding the whole term: name, slug, description, parent and every tracked meta key.</p>
+<p>Open a term to edit it and scroll down to <strong>History</strong>. Each row is one save: when, who, via what, and a summary of which fields changed. <strong>Compare</strong> opens the standard WordPress revisions screen with the slider, where every changed field is shown before and after. <strong>Restore</strong> is the native restore and puts the whole term back to that save; the restore itself becomes a revision marked <code>restore</code>, so nothing is ever silently undone.</p>
+<p>Housekeeping keys that plugins rewrite on every save (timestamps, migration markers) are ignored via the list on the Terms tab, so they do not create noise. Empty values are not stored, so a plugin writing blanks to twenty keys does not read as twenty changes. Deleting a term keeps its snapshot post and history.</p>
+<p>To start history from today for every term in a taxonomy rather than from each term\'s next edit, run <code>wp ace-revisions snapshot &lt;taxonomy&gt;</code>.</p>',
             ],
             'sources' => [
                 'title'   => __( 'Sources and batches', 'ace-revisions' ),
@@ -68,18 +69,31 @@ final class Ace_Revisions_Guide {
                 'title'   => __( 'Storage and pruning', 'ace-revisions' ),
                 'icon'    => 'database',
                 'content' => '
-<p>The cap on the <strong>Storage</strong> tab is per object and counts change sets, not rows. With the default of 5, a term keeps its last five saves however many fields each one touched. Pruning runs after each save and can be applied retrospectively with <code>wp ace-revisions prune</code>.</p>
-<p>Term history lives in its own table (<code>' . esc_html( Ace_Revisions::table() ) . '</code>). Post meta history lives on the revisions themselves, so it follows the site-wide revision limit if that is lower than the cap.</p>
-<p>Deactivating or deleting the plugin leaves all history in place. Nothing is removed unless you drop the table yourself.</p>',
+<p>The cap on the <strong>Storage</strong> tab is the native revisions limit applied per tracked term. Post meta history lives on the post\'s own revisions and follows the limits on the <strong>Native limits</strong> tab, raised to the cap for tracked post types so meta history is never shorter than you asked for. <code>wp ace-revisions prune</code> applies the cap retrospectively.</p>
+<p>The <strong>Overview</strong> tab shows how many revisions the database holds and how much room they take, per content type, and what limit is in force for each. The clean-up there removes revisions of content nobody has modified for a chosen number of months; the content itself is never touched.</p>
+<p>Deactivating or deleting the plugin leaves all history in place: term snapshots are ordinary hidden posts with ordinary revisions.</p>',
+            ],
+            'limits' => [
+                'title'   => __( 'Native limits', 'ace-revisions' ),
+                'icon'    => 'admin-settings',
+                'content' => '
+<p>WordPress has three knobs for revisions and they normally live in <code>wp-config.php</code> or in code. They are all on the <strong>Native limits</strong> tab:</p>
+<table>
+<tr><th>Keep revisions (per post type)</th><td>Off removes revision support for that type: no revisions are created and the Revisions panel disappears from the editor.</td></tr>
+<tr><th>Revisions to keep (per post type)</th><td>-1 is unlimited (the WordPress default), 0 keeps none, any other number is a rolling limit per post. Applied through <code>wp_revisions_to_keep</code>.</td></tr>
+<tr><th>Autosave interval</th><td>Seconds between editor autosaves. Applied by defining <code>AUTOSAVE_INTERVAL</code> when wp-config has not.</td></tr>
+</table>
+<p>A constant already set in <code>wp-config.php</code> (<code>WP_POST_REVISIONS</code>, <code>AUTOSAVE_INTERVAL</code>) always wins over these settings; the Overview tab shows which source is in force for each type.</p>',
             ],
             'cli' => [
                 'title'   => __( 'WP-CLI', 'ace-revisions' ),
                 'icon'    => 'editor-code',
                 'content' => '
 <pre>wp ace-revisions term &lt;term_id&gt; [--taxonomy=&lt;tax&gt;] [--format=json]
-wp ace-revisions restore &lt;row_id&gt;
+wp ace-revisions restore &lt;revision_id&gt;
+wp ace-revisions snapshot &lt;taxonomy&gt;
 wp ace-revisions prune [--taxonomy=&lt;tax&gt;]</pre>
-<p>Row ids come from the <code>term</code> command or the History table.</p>',
+<p>Revision ids come from the <code>term</code> command, the History table or the revisions screen URL.</p>',
             ],
             'hooks' => [
                 'title'   => __( 'Hooks for developers', 'ace-revisions' ),
@@ -98,7 +112,40 @@ wp ace-revisions prune [--taxonomy=&lt;tax&gt;]</pre>
 </table>',
             ],
         ];
+        $sections['changelog'] = [
+            'title'   => __( "What's new", 'ace-revisions' ),
+            'icon'    => 'megaphone',
+            'content' => self::changelog_html(),
+        ];
         return apply_filters( 'ace_revisions_guide_sections', $sections );
+    }
+
+    /**
+     * CHANGELOG.md as HTML (headings, bullets, paragraphs only).
+     */
+    public static function changelog_html(): string {
+        $file = ACE_REVISIONS_PATH . 'CHANGELOG.md';
+        if ( ! file_exists( $file ) ) {
+            return '';
+        }
+        $html = '';
+        $list = false;
+        foreach ( file( $file, FILE_IGNORE_NEW_LINES ) as $line ) {
+            if ( 0 === strpos( $line, '# ' ) ) {
+                continue;
+            }
+            if ( 0 === strpos( $line, '## ' ) ) {
+                $html .= ( $list ? '</ul>' : '' ) . '<h4>' . esc_html( substr( $line, 3 ) ) . '</h4>';
+                $list  = false;
+            } elseif ( 0 === strpos( $line, '- ' ) ) {
+                $html .= ( $list ? '' : '<ul>' ) . '<li>' . esc_html( substr( $line, 2 ) ) . '</li>';
+                $list  = true;
+            } elseif ( '' !== trim( $line ) ) {
+                $html .= ( $list ? '</ul>' : '' ) . '<p>' . esc_html( $line ) . '</p>';
+                $list  = false;
+            }
+        }
+        return $html . ( $list ? '</ul>' : '' );
     }
 
     public static function render(): void {

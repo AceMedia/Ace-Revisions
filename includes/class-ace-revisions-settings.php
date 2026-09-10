@@ -14,6 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Ace_Revisions_Settings {
 
+    /** @var array|null Per-request cache of the merged options; cleared on update(). */
+    private static $cache = null;
+
     const OPTION = 'ace_revisions_options';
 
     /**
@@ -55,12 +58,21 @@ final class Ace_Revisions_Settings {
                 'default' => "",
                 'rows' => 4,
             ],
+            'term_meta_ignore' => [
+                'tab' => "terms",
+                'section' => "terms-keys",
+                'type' => "textarea",
+                'label' => "Ignore these term meta keys",
+                'help' => "Housekeeping keys plugins rewrite on every save (timestamps, migration markers). One key or prefix* per line.",
+                'default' => "_edit_*\n*_migration_check\n*_last_synced*",
+                'rows' => 3,
+            ],
             'cap_per_object' => [
                 'tab' => "storage",
                 'section' => "storage-cap",
                 'type' => "number",
-                'label' => "Change sets kept per object",
-                'help' => "Older change sets beyond this count are pruned after each save.",
+                'label' => "Revisions kept per object",
+                'help' => "Native revisions cap for tracked terms and post types. Older revisions are dropped as new ones are made.",
                 'default' => 5,
                 'min' => 1,
                 'max' => 100,
@@ -70,9 +82,40 @@ final class Ace_Revisions_Settings {
                 'section' => "storage-cap",
                 'type' => "checkbox",
                 'label' => "Only store when a tracked value actually changed",
-                'help' => "Saves that touch nothing tracked do not create a change set.",
+                'help' => "A save where nothing tracked differs does not create a revision.",
                 'default' => 1,
             ],
+        ];
+
+        // Native revision controls, one pair per post type that supports revisions.
+        foreach ( self::revision_post_types() as $type => $label ) {
+            $fields[ 'revisions_enabled_' . $type ] = [
+                'tab'     => 'limits',
+                'section' => 'limits-types',
+                'type'    => 'checkbox',
+                'label'   => sprintf( __( '%s: keep revisions', 'ace-revisions' ), $label ),
+                'default' => 1,
+            ];
+            $fields[ 'revisions_keep_' . $type ] = [
+                'tab'     => 'limits',
+                'section' => 'limits-types',
+                'type'    => 'number',
+                'label'   => sprintf( __( '%s: revisions to keep', 'ace-revisions' ), $label ),
+                'help'    => __( '-1 keeps every revision (the WordPress default); 0 keeps none.', 'ace-revisions' ),
+                'default' => -1,
+                'min'     => -1,
+                'max'     => 1000,
+            ];
+        }
+        $fields['autosave_interval'] = [
+            'tab'     => 'limits',
+            'section' => 'limits-autosave',
+            'type'    => 'number',
+            'label'   => __( 'Autosave interval (seconds)', 'ace-revisions' ),
+            'help'    => __( 'How often the editor autosaves. Only applies when AUTOSAVE_INTERVAL is not set in wp-config.php.', 'ace-revisions' ),
+            'default' => 60,
+            'min'     => 10,
+            'max'     => 3600,
         ];
 
         /**
@@ -87,8 +130,38 @@ final class Ace_Revisions_Settings {
      * Tabs: id, label, dashicon, help (guide panel text), sections; custom => true
      * renders through the ace_revisions_settings_tab_content action instead of fields.
      */
+    /**
+     * Post types that support revisions (by their own registration, before we touch them).
+     *
+     * @return array<string,string> name => label
+     */
+    public static function revision_post_types(): array {
+        static $types = null;
+        if ( null !== $types ) {
+            return $types;
+        }
+        $types = [];
+        foreach ( get_post_types( [ 'show_ui' => true ], 'objects' ) as $object ) {
+            if ( Ace_Revisions_Terms::POST_TYPE === $object->name ) {
+                continue;
+            }
+            $stored = get_option( self::OPTION );
+            if ( post_type_supports( $object->name, 'revisions' ) || ! empty( $stored[ 'revisions_enabled_' . $object->name ] ) ) {
+                $types[ $object->name ] = $object->labels->name;
+            }
+        }
+        return $types;
+    }
+
     public static function tabs(): array {
-        $tabs = [[
+        $tabs = [
+            [
+                'id' => "overview",
+                'label' => "Overview",
+                'icon' => "dashboard",
+                'custom' => true,
+                'help' => "How many revisions the database holds and how much room they take, by content type. Term snapshots are the hidden posts this plugin keeps per tracked term. The clean-up removes revisions of content nobody has touched for a while; the content itself is never removed.",
+            ],[
             'id' => "tracking",
             'label' => "Post meta",
             'icon' => "backup",
@@ -108,7 +181,7 @@ final class Ace_Revisions_Settings {
             'id' => "terms",
             'label' => "Terms",
             'icon' => "tag",
-            'help' => "Terms get their own small change log because WordPress has no revisions for them at all. Name, slug, description, parent and every term meta key are captured from any panel, including plugins you did not build. A History section with Restore appears at the bottom of the term edit screen.",
+            'help' => "WordPress has no revisions for terms, so each tracked term gets a hidden snapshot post and every save of the term becomes one native revision of it: name, slug, description, parent and every term meta key, from any panel including plugins you did not build. The term edit screen gets a History section that summarises each revision and links to the standard revisions screen for the full before/after and Restore.",
             'sections' => [[
                 'id' => "terms-taxonomies",
                 'title' => "Taxonomies",
@@ -121,10 +194,26 @@ final class Ace_Revisions_Settings {
                 'description' => "Leave empty to track every term meta key on the tracked taxonomies.",
             ]],
         ], [
+            'id' => "limits",
+            'label' => "Native limits",
+            'icon' => "admin-settings",
+            'help' => "The WordPress revision controls, in one place. Per post type: whether revisions are kept at all and how many. WP_POST_REVISIONS in wp-config.php wins over the per-type number when it is set; AUTOSAVE_INTERVAL likewise. What is currently in force is shown on the Overview tab.",
+            'sections' => [[
+                'id' => "limits-types",
+                'title' => "Per post type",
+                'icon' => "admin-post",
+                'description' => "Switching revisions off for a type also hides its Revisions panel.",
+            ], [
+                'id' => "limits-autosave",
+                'title' => "Autosave",
+                'icon' => "clock",
+                'description' => "",
+            ]],
+        ], [
             'id' => "storage",
             'label' => "Storage",
             'icon' => "database",
-            'help' => "One change set is one save (or one batch run). The cap counts change sets per object, not rows, so a screen that saves ten fields still counts as one. Older sets are pruned after each save and by wp ace-revisions prune.",
+            'help' => "One save is one revision holding the whole term or post, however many fields it touched. The cap is the native revisions limit applied per object; wp ace-revisions prune applies it retrospectively.",
             'sections' => [[
                 'id' => "storage-cap",
                 'title' => "Retention",
@@ -144,12 +233,11 @@ final class Ace_Revisions_Settings {
     }
 
     public static function all(): array {
-        static $cache = null;
-        if ( null === $cache ) {
-            $stored = get_option( self::OPTION, [] );
-            $cache  = wp_parse_args( is_array( $stored ) ? $stored : [], self::defaults() );
+        if ( null === self::$cache ) {
+            $stored      = get_option( self::OPTION, [] );
+            self::$cache = wp_parse_args( is_array( $stored ) ? $stored : [], self::defaults() );
         }
-        return $cache;
+        return self::$cache;
     }
 
     public static function get( string $key, $fallback = null ) {
@@ -170,6 +258,7 @@ final class Ace_Revisions_Settings {
     public static function update( array $raw ): array {
         $clean = self::sanitise( $raw );
         update_option( self::OPTION, $clean, false );
+        self::$cache = null;
         update_option( 'ace_revisions_version', ACE_REVISIONS_VERSION, false );
         do_action( 'ace_revisions_settings_saved', $clean );
         return $clean;

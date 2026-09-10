@@ -3,7 +3,7 @@
  * Plugin Name: Ace Revisions
  * Plugin URI: https://github.com/AceMedia/Ace-Revisions
  * Description: Revision history for post meta and taxonomy terms. Tracks who changed what, when and from where, with restore.
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: AceMedia
  * Author URI: https://acemedia.ninja
  * Text Domain: ace-revisions
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Bump on every release: drives asset cache-busting and the options migration check.
-define( 'ACE_REVISIONS_VERSION', '0.2.0' );
+define( 'ACE_REVISIONS_VERSION', '0.3.0' );
 define( 'ACE_REVISIONS_FILE', __FILE__ );
 define( 'ACE_REVISIONS_PATH', plugin_dir_path( __FILE__ ) );
 define( 'ACE_REVISIONS_URL', plugin_dir_url( __FILE__ ) );

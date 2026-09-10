@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Ace_Revisions {
 
-    const DB_VERSION = '1';
+    const DB_VERSION = '2';
 
     private static $instance = null;
 
@@ -29,13 +29,17 @@ final class Ace_Revisions {
     private function __construct() {
         require_once ACE_REVISIONS_PATH . 'includes/class-ace-revisions-post-meta.php';
         require_once ACE_REVISIONS_PATH . 'includes/class-ace-revisions-terms.php';
+        require_once ACE_REVISIONS_PATH . 'includes/class-ace-revisions-native.php';
 
         new Ace_Revisions_Post_Meta();
         new Ace_Revisions_Terms();
+        new Ace_Revisions_Native();
 
         if ( is_admin() ) {
             require_once ACE_REVISIONS_PATH . 'includes/admin/class-ace-revisions-term-history.php';
+            require_once ACE_REVISIONS_PATH . 'includes/admin/class-ace-revisions-dashboard.php';
             new Ace_Revisions_Term_History();
+            new Ace_Revisions_Dashboard();
         }
 
         if ( defined( 'WP_CLI' ) && WP_CLI ) {
@@ -43,62 +47,29 @@ final class Ace_Revisions {
             WP_CLI::add_command( 'ace-revisions', 'Ace_Revisions_CLI' );
         }
 
-        add_action( 'init', [ $this, 'maybe_upgrade' ] );
+        add_action( 'init', [ __CLASS__, 'maybe_upgrade' ] );
+    }
+
+    public static function activate(): void {
+        self::maybe_upgrade();
     }
 
     /**
-     * Activation: create the term change table. Plain CREATE TABLE (no IF NOT EXISTS,
-     * dbDelta misparses it and silently stops diffing the table).
+     * Term history moved from a custom table (db version 1, never released) onto
+     * native revisions of snapshot posts; drop the old table on upgrade.
      */
-    public static function activate(): void {
-        self::create_tables();
+    public static function maybe_upgrade(): void {
+        if ( get_option( 'ace_revisions_db_version' ) === self::DB_VERSION ) {
+            return;
+        }
+        global $wpdb;
+        $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}ace_revisions_terms" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
         update_option( 'ace_revisions_db_version', self::DB_VERSION, false );
     }
 
-    public function maybe_upgrade(): void {
-        if ( get_option( 'ace_revisions_db_version' ) !== self::DB_VERSION ) {
-            self::create_tables();
-            update_option( 'ace_revisions_db_version', self::DB_VERSION, false );
-        }
-    }
-
-    public static function table(): string {
-        global $wpdb;
-        return $wpdb->prefix . 'ace_revisions_terms';
-    }
-
-    private static function create_tables(): void {
-        global $wpdb;
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-        $table   = self::table();
-        $charset = $wpdb->get_charset_collate();
-        $sql     = "CREATE TABLE {$table} (
-            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            term_id bigint(20) unsigned NOT NULL,
-            taxonomy varchar(32) NOT NULL,
-            field varchar(255) NOT NULL,
-            old_value longtext NULL,
-            new_value longtext NULL,
-            user_id bigint(20) unsigned NOT NULL DEFAULT 0,
-            source varchar(20) NOT NULL DEFAULT 'admin',
-            batch_id varchar(64) NOT NULL DEFAULT '',
-            created_at datetime NOT NULL,
-            PRIMARY KEY  (id),
-            KEY term_tax (term_id, taxonomy),
-            KEY batch_id (batch_id),
-            KEY created_at (created_at)
-        ) {$charset};";
-        $result = dbDelta( $sql );
-
-        // Guard against the silent-failure case: verify the table exists before trusting the version.
-        $exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-        if ( $exists !== $table ) {
-            error_log( 'Ace Revisions: failed to create ' . $table . ' - ' . wp_json_encode( $result ) );
-        }
-    }
-
     /**
-     * Does a meta key match the configured key list (exact or prefix*)?
+     * Does a meta key match the configured key list? Exact match, or a wildcard
+     * pattern with * anywhere (prefix_*, *_suffix, *middle*).
      */
     public static function key_matches( string $key, array $patterns ): bool {
         if ( 0 === strpos( $key, '_edit_' ) ) {
@@ -108,8 +79,8 @@ final class Ace_Revisions {
             if ( '' === $pattern ) {
                 continue;
             }
-            if ( '*' === substr( $pattern, -1 ) ) {
-                if ( 0 === strpos( $key, rtrim( $pattern, '*' ) ) ) {
+            if ( false !== strpos( $pattern, '*' ) ) {
+                if ( fnmatch( $pattern, $key ) ) {
                     return true;
                 }
             } elseif ( $key === $pattern ) {
