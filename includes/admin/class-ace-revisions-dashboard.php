@@ -14,10 +14,112 @@ final class Ace_Revisions_Dashboard {
 
     const ACTION = 'ace_revisions_cleanup';
     const BATCH  = 500;
+    const CRON   = 'ace_revisions_nightly_cleanup';
 
     public function __construct() {
-        add_action( 'ace_revisions_settings_tab_content', [ $this, 'render' ] );
-        add_action( 'admin_post_' . self::ACTION, [ $this, 'cleanup' ] );
+        add_action( self::CRON, [ __CLASS__, 'nightly' ] );
+        add_action( 'init', [ __CLASS__, 'schedule' ] );
+        add_action( 'ace_revisions_settings_saved', [ __CLASS__, 'schedule' ] );
+        if ( is_admin() ) {
+            add_action( 'ace_revisions_settings_tab_content', [ $this, 'render' ] );
+            add_action( 'ace_revisions_settings_section_after', [ $this, 'presets' ], 10, 2 );
+            add_action( 'admin_post_' . self::ACTION, [ $this, 'cleanup' ] );
+        }
+    }
+
+    // ---------------------------------------------------------------- nightly cron
+
+    public static function schedule(): void {
+        $enabled = (bool) Ace_Revisions_Settings::get( 'cleanup_enabled', 0 );
+        $next    = wp_next_scheduled( self::CRON );
+        if ( $enabled && ! $next ) {
+            wp_schedule_event( strtotime( 'tomorrow 03:00' ), 'daily', self::CRON );
+        } elseif ( ! $enabled && $next ) {
+            wp_unschedule_event( $next, self::CRON );
+        }
+    }
+
+    /**
+     * Delete stale revisions in batches until none match or a time budget runs out.
+     */
+    public static function nightly(): void {
+        if ( ! Ace_Revisions_Settings::get( 'cleanup_enabled', 0 ) ) {
+            return;
+        }
+        $months  = max( 1, (int) Ace_Revisions_Settings::get( 'cleanup_months', 12 ) );
+        $deleted = 0;
+        $start   = time();
+        while ( time() - $start < 50 ) {
+            $ids = self::stale_ids( $months, '', self::BATCH );
+            if ( ! $ids ) {
+                break;
+            }
+            foreach ( $ids as $id ) {
+                if ( wp_delete_post_revision( $id ) ) {
+                    $deleted++;
+                }
+            }
+            if ( count( $ids ) < self::BATCH ) {
+                break;
+            }
+        }
+        update_option( 'ace_revisions_last_cleanup', [ 'time' => time(), 'deleted' => $deleted, 'months' => $months, 'remaining' => self::stale_count( $months ) ], false );
+        do_action( 'ace_revisions_cleanup_ran', $deleted, $months, '' );
+    }
+
+    // ---------------------------------------------------------------- presets
+
+    /**
+     * One-click key presets under the Meta keys textarea.
+     */
+    public function presets( string $section_id, string $tab_id ): void {
+        if ( 'tracking-keys' !== $section_id ) {
+            return;
+        }
+        $presets = apply_filters( 'ace_revisions_key_presets', [
+            'ace-seo'     => [ 'label' => __( 'Ace Crawl Enhancer', 'ace-revisions' ), 'keys' => [ '_ace_seo_*' ] ],
+            'woocommerce' => [ 'label' => __( 'WooCommerce prices and stock', 'ace-revisions' ), 'keys' => [ '_price', '_regular_price', '_sale_price', '_sale_price_dates_from', '_sale_price_dates_to', '_stock', '_stock_status', '_manage_stock', '_sku' ] ],
+            'thumbnail'   => [ 'label' => __( 'Featured image', 'ace-revisions' ), 'keys' => [ '_thumbnail_id' ] ],
+            'redirects'   => [ 'label' => __( 'Redirect meta', 'ace-revisions' ), 'keys' => [ '*redirect*' ] ],
+        ] );
+        echo '<div class="setting-row"><div class="setting-label"><span>' . esc_html__( 'Presets', 'ace-revisions' ) . '</span></div><div class="setting-field ace-preset-row">';
+        foreach ( $presets as $id => $preset ) {
+            printf(
+                '<button type="button" class="button ace-preset" data-target="%1$s" data-lines="%2$s">%3$s</button> ',
+                esc_attr( Ace_Revisions_Admin::PAGE . '-meta_keys' ),
+                esc_attr( implode( "\n", $preset['keys'] ) ),
+                esc_html( $preset['label'] )
+            );
+        }
+        echo '<p class="description">' . esc_html__( 'Adds the keys to the list above; duplicates are skipped. Save afterwards.', 'ace-revisions' ) . '</p></div></div>';
+    }
+
+    /**
+     * What is tracked right now, in one glance.
+     */
+    private function tracked_summary(): void {
+        $types = (array) Ace_Revisions_Settings::get( 'post_types', [] );
+        $keys  = Ace_Revisions_Settings::get_list( 'meta_keys' );
+        $taxes = (array) Ace_Revisions_Settings::get( 'taxonomies', [] );
+        $label = static function ( array $names, callable $lookup ): string {
+            $out = [];
+            foreach ( $names as $name ) {
+                $object = $lookup( $name );
+                $out[]  = $object ? $object->labels->name : $name;
+            }
+            return $out ? implode( ', ', $out ) : '—';
+        };
+        ?>
+        <table class="widefat striped ace-revisions-table ace-revisions-tracked">
+            <tbody>
+                <tr><th><?php esc_html_e( 'Post types with meta tracked', 'ace-revisions' ); ?></th><td><?php echo esc_html( $label( $types, 'get_post_type_object' ) ); ?> <a href="<?php echo esc_url( Ace_Revisions_Admin::url( 'tracking' ) ); ?>"><?php esc_html_e( 'change', 'ace-revisions' ); ?></a></td></tr>
+                <tr><th><?php esc_html_e( 'Meta keys', 'ace-revisions' ); ?></th><td><?php echo $keys ? '<code>' . esc_html( implode( '</code> <code>', $keys ) ) . '</code>' : '—'; ?></td></tr>
+                <tr><th><?php esc_html_e( 'Taxonomies with term history', 'ace-revisions' ); ?></th><td><?php echo esc_html( $label( $taxes, 'get_taxonomy' ) ); ?> <a href="<?php echo esc_url( Ace_Revisions_Admin::url( 'terms' ) ); ?>"><?php esc_html_e( 'change', 'ace-revisions' ); ?></a></td></tr>
+            </tbody>
+        </table>
+        <?php if ( ! $types && ! $taxes ) : ?>
+            <div class="notice notice-warning inline"><p><?php esc_html_e( 'Nothing is being tracked yet. Tick post types and taxonomies on the Post meta and Terms tabs.', 'ace-revisions' ); ?></p></div>
+        <?php endif;
     }
 
     // ---------------------------------------------------------------- stats
@@ -107,6 +209,8 @@ final class Ace_Revisions_Dashboard {
         $type   = isset( $_GET['type'] ) ? sanitize_key( wp_unslash( $_GET['type'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         $stale  = self::stale_count( $months, $type );
         $done   = isset( $_GET['ace_cleaned'] ) ? (int) $_GET['ace_cleaned'] : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $last   = get_option( 'ace_revisions_last_cleanup' );
+        $this->tracked_summary();
         ?>
         <div class="ace-stat-grid">
             <div class="ace-stat"><span class="ace-stat__label"><?php esc_html_e( 'Revisions in database', 'ace-revisions' ); ?></span><span class="ace-stat__value"><?php echo esc_html( number_format_i18n( $total ) ); ?></span></div>
@@ -167,6 +271,13 @@ final class Ace_Revisions_Dashboard {
         <p class="description"><?php esc_html_e( 'Change these on the Native limits tab. A constant set in wp-config.php always wins and is shown as the source.', 'ace-revisions' ); ?></p>
 
         <h3><?php esc_html_e( 'Clean up old revisions', 'ace-revisions' ); ?></h3>
+        <?php if ( is_array( $last ) ) : ?>
+            <p class="description"><?php echo esc_html( sprintf( __( 'Nightly clean-up last ran %1$s and removed %2$s revisions (content untouched for %3$d months); %4$s still match.', 'ace-revisions' ), date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $last['time'] ), number_format_i18n( (int) $last['deleted'] ), (int) $last['months'], number_format_i18n( (int) $last['remaining'] ) ) ); ?></p>
+        <?php elseif ( Ace_Revisions_Settings::get( 'cleanup_enabled', 0 ) ) : ?>
+            <p class="description"><?php esc_html_e( 'Nightly clean-up is switched on and has not run yet.', 'ace-revisions' ); ?></p>
+        <?php else : ?>
+            <p class="description"><?php echo wp_kses_post( sprintf( __( 'Nightly clean-up is off. Switch it on under <a href="%s">Storage</a>.', 'ace-revisions' ), esc_url( Ace_Revisions_Admin::url( 'storage', 'storage-cleanup' ) ) ) ); ?></p>
+        <?php endif; ?>
         <?php if ( null !== $done ) : ?>
             <div class="notice notice-success inline"><p><?php echo esc_html( sprintf( _n( 'Deleted %d revision.', 'Deleted %d revisions.', $done, 'ace-revisions' ), $done ) ); ?><?php echo $stale ? ' ' . esc_html( sprintf( __( '%d more match; run it again.', 'ace-revisions' ), $stale ) ) : ''; ?></p></div>
         <?php endif; ?>

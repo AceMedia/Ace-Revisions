@@ -115,6 +115,17 @@ import SaveBar from './components/SaveBar.js';
 
 		initGuidePanels();
 
+		$( document ).on( 'click', '.ace-preset', function () {
+			const target = document.getElementById( $( this ).data( 'target' ) );
+			if ( ! target ) {
+				return;
+			}
+			const have = target.value.split( /\r?\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
+			const add = String( $( this ).data( 'lines' ) || '' ).split( '\\n' ).map( ( l ) => l.trim() ).filter( ( l ) => l && ! have.includes( l ) );
+			target.value = have.concat( add ).join( '\n' );
+			$( target ).trigger( 'input' ).trigger( 'change' );
+		} );
+
 		window.addEventListener( 'hashchange', () => {
 			const [ tabId, groupId ] = window.location.hash.replace( '#', '' ).split( '/' );
 			activateTabAndGroup( tabId, groupId );

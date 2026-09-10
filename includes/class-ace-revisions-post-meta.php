@@ -17,9 +17,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Ace_Revisions_Post_Meta {
 
     const SOURCE_KEY = '_ace_revisions_source';
+    const BATCH_KEY  = '_ace_revisions_batch';
+
+    /** @var array<int,int> post_id => revision_id created this request. */
+    private $created = [];
 
     public function __construct() {
         add_action( '_wp_put_post_revision', [ $this, 'copy_meta_to_revision' ] );
+        add_action( 'shutdown', [ $this, 'refresh_late_meta' ], 1 );
         add_filter( 'wp_save_post_revision_post_has_changed', [ $this, 'meta_has_changed' ], 10, 3 );
         add_action( 'wp_restore_post_revision', [ $this, 'restore_meta' ], 10, 2 );
         add_filter( 'wp_get_revision_ui_diff', [ $this, 'add_meta_to_diff' ], 10, 3 );
@@ -65,7 +70,52 @@ final class Ace_Revisions_Post_Meta {
             }
         }
         add_metadata( 'post', $revision_id, self::SOURCE_KEY, Ace_Revisions::source() );
+        $batch = Ace_Revisions::batch_id();
+        if ( $batch ) {
+            add_metadata( 'post', $revision_id, self::BATCH_KEY, $batch );
+        }
+        $this->created[ $parent->ID ] = $revision_id;
         do_action( 'ace_revisions_meta_copied', $revision_id, $parent->ID );
+    }
+
+    /**
+     * Classic meta boxes and REST meta both write AFTER the revision is created
+     * inside wp_update_post(). At the end of the request, re-copy tracked meta
+     * onto the revision made this request so it holds the final values.
+     */
+    public function refresh_late_meta(): void {
+        foreach ( $this->created as $post_id => $revision_id ) {
+            $current = self::collect( $post_id );
+            if ( $current === self::collect( $revision_id ) ) {
+                continue;
+            }
+            foreach ( array_keys( self::collect( $revision_id ) ) as $key ) {
+                delete_metadata( 'post', $revision_id, $key );
+            }
+            foreach ( $current as $key => $values ) {
+                foreach ( $values as $value ) {
+                    add_metadata( 'post', $revision_id, $key, $value );
+                }
+            }
+        }
+        $this->created = [];
+    }
+
+    /**
+     * Keys changed between two revisions (or a revision and its parent).
+     */
+    public static function changed_keys( int $from_id, int $to_id ): array {
+        $from = self::collect( $from_id );
+        $to   = self::collect( $to_id );
+        $keys = array_unique( array_merge( array_keys( $from ), array_keys( $to ) ) );
+        $out  = [];
+        foreach ( $keys as $key ) {
+            if ( ( $from[ $key ] ?? null ) !== ( $to[ $key ] ?? null ) ) {
+                $out[] = (string) $key;
+            }
+        }
+        sort( $out );
+        return $out;
     }
 
     /**

@@ -35,11 +35,12 @@ final class Ace_Revisions {
         new Ace_Revisions_Terms();
         new Ace_Revisions_Native();
 
+        require_once ACE_REVISIONS_PATH . 'includes/admin/class-ace-revisions-dashboard.php';
+        new Ace_Revisions_Dashboard();
+
         if ( is_admin() ) {
             require_once ACE_REVISIONS_PATH . 'includes/admin/class-ace-revisions-term-history.php';
-            require_once ACE_REVISIONS_PATH . 'includes/admin/class-ace-revisions-dashboard.php';
             new Ace_Revisions_Term_History();
-            new Ace_Revisions_Dashboard();
         }
 
         if ( defined( 'WP_CLI' ) && WP_CLI ) {

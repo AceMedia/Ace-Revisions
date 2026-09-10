@@ -28,7 +28,7 @@ final class Ace_Revisions_Guide {
 <li>On <strong>Terms</strong>, tick the taxonomies whose terms you want a history for.</li>
 <li>Save. From the next edit onwards, history is recorded.</li>
 </ol>
-<p>Nothing is back-filled: the first tracked save of an object creates its first change set.</p>',
+<p>Nothing is back-filled: the first tracked save of an object creates its first revision. Use the presets under Meta keys to add the common Ace Crawl Enhancer or WooCommerce keys in one click, and check the Overview tab to see what is tracked at a glance.</p>',
             ],
             'post-meta' => [
                 'title'   => __( 'Post meta', 'ace-revisions' ),
@@ -91,8 +91,12 @@ final class Ace_Revisions_Guide {
                 'content' => '
 <pre>wp ace-revisions term &lt;term_id&gt; [--taxonomy=&lt;tax&gt;] [--format=json]
 wp ace-revisions restore &lt;revision_id&gt;
+wp ace-revisions post &lt;post_id&gt;
+wp ace-revisions batch &lt;batch_id&gt; [--undo]
 wp ace-revisions snapshot &lt;taxonomy&gt;
-wp ace-revisions prune [--taxonomy=&lt;tax&gt;]</pre>
+wp ace-revisions prune [--taxonomy=&lt;tax&gt;]
+wp ace-revisions cleanup [--months=&lt;n&gt;] [--type=&lt;post_type&gt;] [--yes]</pre>
+<p><code>batch --undo</code> restores every term and post the batch touched to the revision just before it, and records the undo as its own batch.</p>
 <p>Revision ids come from the <code>term</code> command, the History table or the revisions screen URL.</p>',
             ],
             'hooks' => [

@@ -2,6 +2,12 @@
 
 Plain-English record of what changed in each release. Dates are when the version was pushed.
 
+## 0.4.0 - 10 September 2026
+- Overview now opens with what is being tracked, and the nightly clean-up (switch it on under Storage) reports its last run there.
+- One-click presets under Meta keys: Ace Crawl Enhancer, WooCommerce prices and stock, featured image, redirect meta.
+- Meta saved after the revision is written (classic meta boxes, REST) is now caught, so the revision always holds the final values.
+- WP-CLI: `post <id>` lists a post's revisions with the meta that changed; `batch <id> --undo` rolls back everything a batch touched; `cleanup` runs the stale-revision clean-up.
+
 ## 0.3.0 - 10 September 2026
 - Term history now uses the standard WordPress revisions: one revision per save of the whole term, with the usual compare slider and Restore. The custom history table is gone.
 - New Overview tab: how many revisions the database holds and how much space they take, per content type, plus a clean-up for revisions of content nobody has touched for a chosen number of months.

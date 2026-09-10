@@ -77,6 +77,23 @@ final class Ace_Revisions_Settings {
                 'min' => 1,
                 'max' => 100,
             ],
+            'cleanup_enabled' => [
+                'tab' => "storage",
+                'section' => "storage-cleanup",
+                'type' => "checkbox",
+                'label' => "Clean up old revisions nightly",
+                'help' => "Runs the Overview clean-up every night for every content type except term snapshots.",
+                'default' => 0,
+            ],
+            'cleanup_months' => [
+                'tab' => "storage",
+                'section' => "storage-cleanup",
+                'type' => "number",
+                'label' => "Content not modified in (months)",
+                'default' => 12,
+                'min' => 1,
+                'max' => 240,
+            ],
             'only_on_change' => [
                 'tab' => "storage",
                 'section' => "storage-cap",
@@ -219,6 +236,11 @@ final class Ace_Revisions_Settings {
                 'title' => "Retention",
                 'icon' => "clock",
                 'description' => "",
+            ], [
+                'id' => "storage-cleanup",
+                'title' => "Nightly clean-up",
+                'icon' => "trash",
+                'description' => "The last run and what it removed are shown on the Overview tab.",
             ]],
         ]];
         return apply_filters( 'ace_revisions_settings_tabs', $tabs );
