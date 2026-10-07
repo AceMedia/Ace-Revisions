@@ -54,3 +54,7 @@ Desktop.ini
 # If you compile blocks and want to commit *build* output, DO NOT ignore /build.
 # Otherwise uncomment this:
 # build/
+
+# Private agent notes (never commit)
+CLAUDE.local.md
+.codex/
